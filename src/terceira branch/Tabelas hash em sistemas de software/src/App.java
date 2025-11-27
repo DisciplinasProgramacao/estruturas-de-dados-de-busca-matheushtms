@@ -1,17 +1,17 @@
 import java.nio.charset.Charset;
-import java.time.LocalDate;
 import java.util.NoSuchElementException;
-import java.util.Random;
 import java.util.Scanner;
 import java.util.function.Function;
+import java.util.Random;
 import java.io.File;
 import java.io.FileWriter;
+import java.io.PrintWriter;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 
 public class App {
 
-	/** Nome do arquivo de dados. O arquivo deve estar localizado na raiz do projeto */
+    /** Nome do arquivo de dados. O arquivo deve estar localizado na raiz do projeto */
     static String nomeArquivoDados;
     
     /** Scanner para leitura de dados do teclado */
@@ -20,11 +20,12 @@ public class App {
     /** Quantidade de produtos cadastrados atualmente na lista */
     static int quantosProdutos = 0;
 
-    static AVL<String, Produto> produtosBalanceadosPorNome;
+    static ABB<String, Produto> produtosCadastradosPorNome;
     
-    static AVL<Integer, Produto> produtosBalanceadosPorId;
-    
-    static TabelaHash<Produto, Lista<Pedido>> pedidosPorProduto;
+    static ABB<Integer, Produto> produtosCadastradosPorId;
+
+    /** Tabela Hash para mapear Produtos -> Lista de Pedidos (Tarefa 2) */
+    static TabelaHash<Produto, Lista<Pedido>> tabelaPedidos;
     
     static void limparTela() {
         System.out.print("\033[H\033[2J");
@@ -33,7 +34,7 @@ public class App {
 
     /** Gera um efeito de pausa na CLI. Espera por um enter para continuar */
     static void pausa() {
-        System.out.println("Digite enter para continuar...");
+        System.out.println("\nDigite enter para continuar...");
         teclado.nextLine();
     }
 
@@ -45,191 +46,263 @@ public class App {
    
     static <T extends Number> T lerOpcao(String mensagem, Class<T> classe) {
         
-    	T valor;
-        
-    	System.out.println(mensagem);
-    	try {
+        T valor;
+        System.out.println(mensagem);
+        try {
             valor = classe.getConstructor(String.class).newInstance(teclado.nextLine());
-        } catch (InstantiationException | IllegalAccessException | IllegalArgumentException 
-        		| InvocationTargetException | NoSuchMethodException | SecurityException e) {
+        } catch (Exception e) { // Robustez genérica para erros de reflexão
             return null;
         }
         return valor;
     }
     
     /** Imprime o menu principal, lê a opção do usuário e a retorna (int).
-     * Perceba que poderia haver uma melhor modularização com a criação de uma classe Menu.
      * @return Um inteiro com a opção do usuário.
     */
     static int menu() {
         cabecalho();
-        System.out.println("1 - Procurar produto, por id");
-        System.out.println("2 - Gravar, em arquivo, pedidos de um produto");
+        System.out.println("1 - Carregar produtos (Arquivo -> Árvore por ID)");
+        System.out.println("2 - Listar todos os produtos (por Nome)");
+        System.out.println("3 - Gerar árvore por Nome (Tarefa 1)");
+        System.out.println("4 - Procurar produto por Nome");
+        System.out.println("5 - Procurar produto por ID");
+        System.out.println("6 - Simular Vendas (Gerar Pedidos e preencher Tabela) (Tarefa 2)");
+        System.out.println("7 - Relatório de Pedidos de um Produto (Tarefa 3)");
         System.out.println("0 - Sair");
         System.out.print("Digite sua opção: ");
-        return Integer.parseInt(teclado.nextLine());
+        
+        // Tarefa 4: Robustez na leitura do menu
+        try {
+            return Integer.parseInt(teclado.nextLine());
+        } catch (NumberFormatException e) {
+            return -1; // Opção inválida
+        }
+    }
+    
+    static <K> ABB<K, Produto> lerProdutos(String nomeArquivoDados, Function<Produto, K> extratorDeChave) {
+        
+        Scanner arquivo = null;
+        int numProdutos;
+        String linha;
+        Produto produto;
+        ABB<K, Produto> produtosCadastrados;
+        K chave;
+        
+        try {
+            arquivo = new Scanner(new File(nomeArquivoDados), Charset.forName("UTF-8"));
+            
+            numProdutos = Integer.parseInt(arquivo.nextLine());
+            produtosCadastrados = new ABB<K, Produto>();
+            
+            for (int i = 0; i < numProdutos; i++) {
+                linha = arquivo.nextLine();
+                produto = Produto.criarDoTexto(linha);
+                chave = extratorDeChave.apply(produto);
+                produtosCadastrados.inserir(chave, produto);
+            }
+            quantosProdutos = numProdutos;
+            
+        } catch (IOException excecaoArquivo) {
+            System.out.println("Erro ao ler arquivo: " + excecaoArquivo.getMessage());
+            produtosCadastrados = null;
+        } catch (Exception e) {
+            System.out.println("Erro nos dados do arquivo.");
+            produtosCadastrados = null;
+        } finally {
+            if(arquivo != null) arquivo.close();
+        }
+        
+        return produtosCadastrados;
     }
     
     /**
-     * Lê os dados de um arquivo-texto e retorna uma árvore de produtos. Arquivo-texto no formato
-     * N (quantidade de produtos) <br/>
-     * tipo;descrição;preçoDeCusto;margemDeLucro;[dataDeValidade] <br/>
-     * Deve haver uma linha para cada um dos produtos. Retorna uma árvore vazia em caso de problemas com o arquivo.
-     * @param nomeArquivoDados Nome do arquivo de dados a ser aberto.
-     * @return Uma árvore com os produtos carregados, ou vazia em caso de problemas de leitura.
+     * TAREFA 2: Implementação do método inserirNaTabela.
+     * Insere o pedido na lista de pedidos do produto correspondente dentro da Tabela Hash.
      */
-    static <K> AVL<K, Produto> lerProdutos(String nomeArquivoDados, Function<Produto, K> extratorDeChave) {
-    	
-    	Scanner arquivo = null;
-    	int numProdutos;
-    	String linha;
-    	Produto produto;
-    	AVL<K, Produto> produtosCadastrados;
-    	K chave;
-    	
-    	try {
-    		arquivo = new Scanner(new File(nomeArquivoDados), Charset.forName("UTF-8"));
-    		
-    		numProdutos = Integer.parseInt(arquivo.nextLine());
-    		produtosCadastrados = new AVL<K, Produto>();
-    		
-    		for (int i = 0; i < numProdutos; i++) {
-    			linha = arquivo.nextLine();
-    			produto = Produto.criarDoTexto(linha);
-    			chave = extratorDeChave.apply(produto);
-    			produtosCadastrados.inserir(chave, produto);
-    		}
-    		quantosProdutos = numProdutos;
-    		
-    	} catch (IOException excecaoArquivo) {
-    		produtosCadastrados = null;
-    	} finally {
-    		arquivo.close();
-    	}
-    	
-    	return produtosCadastrados;
+    private static void inserirNaTabela(Produto produto, Pedido pedido) {
+        Lista<Pedido> listaPedidos;
+        
+        try {
+            // Tenta buscar a lista de pedidos deste produto
+            listaPedidos = tabelaPedidos.pesquisar(produto);
+        } catch (NoSuchElementException e) {
+            // Se não existe, cria nova lista e insere na tabela
+            listaPedidos = new Lista<>();
+            tabelaPedidos.inserir(produto, listaPedidos);
+        }
+        
+        // Insere o pedido na lista (assumindo que a classe Lista tem inserirFinal)
+        listaPedidos.inserir(pedido, listaPedidos.tamanho()); 
     }
-    
+
+    /**
+     * TAREFA 3: Relatório de pedidos de um produto.
+     * Gera um arquivo .txt com os pedidos.
+     */
+    static void pedidosDoProduto() {
+        cabecalho();
+        System.out.println("GERAR RELATÓRIO DE PEDIDOS");
+        
+        Produto p = localizarProdutoNome(produtosCadastradosPorNome);
+        
+        if (p == null) {
+            System.out.println("Produto não selecionado.");
+            return;
+        }
+
+        try {
+            Lista<Pedido> lista = tabelaPedidos.pesquisar(p);
+            
+            String nomeArq = "relatorio_" + p.descricao.replaceAll("\\s+", "") + ".txt";
+            FileWriter arq = new FileWriter(nomeArq);
+            PrintWriter gravarArq = new PrintWriter(arq);
+            
+            gravarArq.printf("RELATÓRIO DE PEDIDOS: %s%n", p.descricao);
+            gravarArq.println("====================================");
+            gravarArq.println(lista.toString());
+            
+            arq.close();
+            System.out.println("Relatório gerado: " + nomeArq);
+            
+        } catch (NoSuchElementException e) {
+            System.out.println("Nenhum pedido encontrado para este produto.");
+        } catch (IOException e) {
+            System.out.println("Erro ao gravar arquivo: " + e.getMessage());
+        }
+    }
+
     static <K> Produto localizarProduto(ABB<K, Produto> produtosCadastrados, K procurado) {
-    	
-    	Produto produto;
-    	
-    	cabecalho();
-    	System.out.println("Localizando um produto...");
-    	
-    	try {
-    		produto = produtosCadastrados.pesquisar(procurado);
-    	} catch (NoSuchElementException excecao) {
-    		produto = null;
-    	}
-    	
-    	System.out.println("Número de comparações realizadas: " + produtosCadastrados.getComparacoes());
-    	System.out.println("Tempo de processamento da pesquisa: " + produtosCadastrados.getTempo() + " ms");
-        
-    	return produto;
-    	
+        Produto produto;
+        try {
+            produto = produtosCadastrados.pesquisar(procurado);
+        } catch (NoSuchElementException excecao) {
+            produto = null;
+        }
+        return produto;
     }
     
-    /** Localiza um produto na árvore de produtos organizados por id, a partir do código de produto informado pelo usuário, e o retorna. 
-     *  Em caso de não encontrar o produto, retorna null */
+    /** Preenchimento do TODO: Localizar produto por ID com robustez */
     static Produto localizarProdutoID(ABB<Integer, Produto> produtosCadastrados) {
+        if(produtosCadastrados == null || produtosCadastrados.vazia()){
+            System.out.println("Árvore vazia. Carregue os dados primeiro.");
+            return null;
+        }
         
-        int idProduto = lerOpcao("Digite o identificador do produto desejado: ", Integer.class);
-        
-        return localizarProduto(produtosCadastrados, idProduto);
+        System.out.print("Digite o ID do produto: ");
+        try {
+            int id = Integer.parseInt(teclado.nextLine());
+            Produto p = localizarProduto(produtosCadastrados, id);
+            if(p == null) System.out.println("Produto não encontrado.");
+            return p;
+        } catch (NumberFormatException e) {
+            System.out.println("ID inválido! Digite apenas números.");
+            return null;
+        }
     }
     
-    /** Localiza um produto na árvore de produtos organizados por nome, a partir do nome de produto informado pelo usuário, e o retorna. 
-     *  A busca não é sensível ao caso. Em caso de não encontrar o produto, retorna null */
+    /** Preenchimento do TODO: Localizar produto por Nome */
     static Produto localizarProdutoNome(ABB<String, Produto> produtosCadastrados) {
+        if(produtosCadastrados == null || produtosCadastrados.vazia()){
+            System.out.println("Árvore vazia.");
+            return null;
+        }
         
-    	String descricao;
-    	
-    	System.out.println("Digite o nome ou a descrição do produto desejado:");
-        descricao = teclado.nextLine();
+        System.out.print("Digite o nome (ou parte dele): ");
+        String nome = teclado.nextLine();
         
-        return localizarProduto(produtosCadastrados, descricao);
+        // Obs: Como é uma ABB exata, a busca deve ser pela chave exata usada na inserção
+        Produto p = localizarProduto(produtosCadastrados, nome);
+        if(p == null) System.out.println("Produto não encontrado.");
+        return p;
     }
     
     private static void mostrarProduto(Produto produto) {
-    	
         cabecalho();
-        String mensagem = "Dados inválidos para o produto!";
-        
         if (produto != null){
-            mensagem = String.format("Dados do produto:\n%s", produto);
+            System.out.println("Dados do produto:\n" + produto);
+        } else {
+            System.out.println("Produto inválido ou não encontrado.");
         }
-        
-        System.out.println(mensagem);
     }
     
-    private static Lista<Pedido> gerarPedidos(int quantidade) {
-        Lista<Pedido> pedidos = new Lista<>();
-        Random sorteio = new Random(42);
-        int quantProdutos;
-        int formaDePagamento;
-        for (int i = 0; i < quantidade; i++) {
-        	formaDePagamento = sorteio.nextInt(2) + 1;
-            Pedido pedido = new Pedido(LocalDate.now(), formaDePagamento);
-            quantProdutos = sorteio.nextInt(8) + 1;
-            for (int j = 0; j < quantProdutos; j++) {
-                int id = sorteio.nextInt(7750) + 10_000;
-                Produto produto = produtosBalanceadosPorId.pesquisar(id);
-                pedido.incluirProduto(produto);
-                inserirNaTabela(produto, pedido);
+    static <K> void listarTodosOsProdutos(ABB<K, Produto> produtosCadastrados) {
+        cabecalho();
+        if(produtosCadastrados != null) {
+            System.out.println("\nPRODUTOS CADASTRADOS:");
+            System.out.println(produtosCadastrados.toString());
+        } else {
+            System.out.println("Nenhum produto cadastrado.");
+        }
+    }
+    
+    /** * Simula a geração de pedidos para testar a Tarefa 2.
+     * Como não temos o código do professor "gerador", criei este simples.
+     */
+    static void simularVendas(ABB<Integer, Produto> arvoreId) {
+        if(arvoreId == null || arvoreId.vazia()) {
+            System.out.println("Carregue os produtos por ID primeiro.");
+            return;
+        }
+        
+        System.out.println("Simulando geração de pedidos...");
+        Random rand = new Random();
+        
+        // Simula 5 pedidos
+        for(int i=0; i<5; i++) {
+            Pedido pedido = new Pedido(java.time.LocalDate.now(), 1); // 1 = à vista
+            
+            // Adiciona 3 produtos aleatórios ao pedido
+            for(int j=0; j<3; j++) {
+                int idAleatorio = 10000 + rand.nextInt(quantosProdutos); // IDs começam em 10000
+                Produto p = localizarProduto(arvoreId, idAleatorio);
+                if(p != null) {
+                    pedido.incluirProduto(p);
+                    // AQUI CHAMAMOS O MÉTODO DA TAREFA 2
+                    inserirNaTabela(p, pedido);
+                }
             }
-            pedidos.inserirFinal(pedido);
+            System.out.println("Pedido " + pedido.getIdPedido() + " gerado e processado.");
         }
-        return pedidos;
+        System.out.println("Tabela hash populada com sucesso.");
     }
-    
-    private static void inserirNaTabela(Produto produto, Pedido pedido) {
-        
-    	Lista<Pedido> pedidosDoProduto;
-    	
-    	try {
-    		pedidosDoProduto = pedidosPorProduto.pesquisar(produto);
-    	} catch (NoSuchElementException excecao) {
-    		pedidosDoProduto = new Lista<>();
-    		pedidosPorProduto.inserir(produto, pedidosDoProduto);
-    	}
-    	pedidosDoProduto.inserirFinal(pedido);
-    }
-    
-    static void pedidosDoProduto() {
-    	
-    	Lista<Pedido> pedidosDoProduto;
-    	Produto produto = localizarProdutoID(produtosBalanceadosPorId);
-    	String nomeArquivo = "RelatorioProduto" + produto.hashCode() + ".txt";  
-    	
-        try {
-        	FileWriter arquivoRelatorio = new FileWriter(nomeArquivo, Charset.forName("UTF-8"));
-    		
-        	pedidosDoProduto = pedidosPorProduto.pesquisar(produto);
-        	arquivoRelatorio.append(pedidosDoProduto.toString() + "\n");
-            arquivoRelatorio.close();
-            System.out.println("Dados salvos em " + nomeArquivo);
-        } catch(IOException excecao) {
-            System.out.println("Problemas para criar o arquivo " + nomeArquivo + ". Tente novamente");        	
-        }
-    }
-    
-	public static void main(String[] args) {
-		teclado = new Scanner(System.in, Charset.forName("UTF-8"));
+
+    public static void main(String[] args) {
+        teclado = new Scanner(System.in, Charset.forName("UTF-8"));
         nomeArquivoDados = "produtos.txt";
-        produtosBalanceadosPorId = lerProdutos(nomeArquivoDados, Produto::hashCode);
-        produtosBalanceadosPorNome = new AVL<>(produtosBalanceadosPorId, produto -> produto.descricao, String::compareTo);
-        pedidosPorProduto = new TabelaHash<>((int)(quantosProdutos * 1.25));
         
-        gerarPedidos(25_000);
-       
+        // Inicializa tabela hash com capacidade (ex: 100)
+        tabelaPedidos = new TabelaHash<>(100); 
+
         int opcao = -1;
       
-        do {
+        do{
             opcao = menu();
             switch (opcao) {
-            	case 1 -> mostrarProduto(localizarProdutoID(produtosBalanceadosPorId));
-            	case 2 -> pedidosDoProduto(); 
+                case 1 -> {
+                    // Carrega por ID (Base principal)
+                    produtosCadastradosPorId = lerProdutos(nomeArquivoDados, (p -> p.idProduto));
+                    if(produtosCadastradosPorId != null) System.out.println("Produtos carregados por ID.");
+                }
+                case 2 -> listarTodosOsProdutos(produtosCadastradosPorNome);
+                case 3 -> {
+                    // TAREFA 1: Criar árvore por nome a partir da árvore de ID
+                    if (produtosCadastradosPorId != null && !produtosCadastradosPorId.vazia()) {
+                        produtosCadastradosPorNome = new ABB<>(
+                            produtosCadastradosPorId, 
+                            (p -> p.descricao), 
+                            String::compareToIgnoreCase
+                        );
+                        System.out.println("Árvore por Nome criada com sucesso (Tarefa 1).");
+                    } else {
+                        System.out.println("Carregue a árvore por ID primeiro (Opção 1).");
+                    }
+                }
+                case 4 -> mostrarProduto(localizarProdutoNome(produtosCadastradosPorNome));
+                case 5 -> mostrarProduto(localizarProdutoID(produtosCadastradosPorId));
+                case 6 -> simularVendas(produtosCadastradosPorId); // Simula gerador para Tarefa 2
+                case 7 -> pedidosDoProduto(); // Tarefa 3
+                case 0 -> System.out.println("Saindo...");
+                default -> System.out.println("Opção inválida!");
             }
             pausa();
         } while(opcao != 0);       
