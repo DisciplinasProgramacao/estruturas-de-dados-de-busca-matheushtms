@@ -3,75 +3,75 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 
 public abstract class Produto implements Comparable<Produto>{
-	
-	private static final double MARGEM_PADRAO = 0.2;
-	private static int ultimoID = 10_000;
-	
-	protected int idProduto;
-	protected String descricao;
-	protected double precoCusto;
-	protected double margemLucro;
-	
-	/**
+    
+    private static final double MARGEM_PADRAO = 0.2;
+    private static int ultimoID = 10_000;
+    
+    protected int idProduto;
+    protected String descricao;
+    protected double precoCusto;
+    protected double margemLucro;
+    
+    /**
      * Inicializador privado. Os valores default, em caso de erro, são:
      * "Produto sem descrição", R$ 0.00, 0.0  
      * @param desc Descrição do produto (mínimo de 3 caracteres)
      * @param precoCusto Preço do produto (mínimo 0.01)
      * @param margemLucro Margem de lucro (mínimo 0.01)
      */
-	private void init(String desc, double precoCusto, double margemLucro) {
-		
-		if ((desc.length() >= 3) && (precoCusto > 0.0) && (margemLucro > 0.0)) {
-			descricao = desc;
-			this.precoCusto = precoCusto;
-			this.margemLucro = margemLucro;
-			idProduto = ultimoID++;
+    private void init(String desc, double precoCusto, double margemLucro) {
+        
+        if ((desc.length() >= 3) && (precoCusto > 0.0) && (margemLucro > 0.0)) {
+            descricao = desc;
+            this.precoCusto = precoCusto;
+            this.margemLucro = margemLucro;
+            idProduto = ultimoID++;
 
-		} else {
-			throw new IllegalArgumentException("Valores inválidos para os dados do produto.");
-		}
-	}
-	
-	/**
+        } else {
+            throw new IllegalArgumentException("Valores inválidos para os dados do produto.");
+        }
+    }
+    
+    /**
      * Construtor completo. Os valores default, em caso de erro, são:
      * "Produto sem descrição", R$ 0.00, 0.0  
      * @param desc Descrição do produto (mínimo de 3 caracteres)
      * @param precoCusto Preço do produto (mínimo 0.01)
      * @param margemLucro Margem de lucro (mínimo 0.01)
      */
-	protected Produto(String desc, double precoCusto, double margemLucro) {
-		init(desc, precoCusto, margemLucro);
-	}
-	
-	/**
+    protected Produto(String desc, double precoCusto, double margemLucro) {
+        init(desc, precoCusto, margemLucro);
+    }
+    
+    /**
      * Construtor sem margem de lucro - fica considerado o valor padrão de margem de lucro.
      * Os valores default, em caso de erro, são:
      * "Produto sem descrição", R$ 0.00 
      * @param desc Descrição do produto (mínimo de 3 caracteres)
      * @param precoCusto Preço do produto (mínimo 0.01)
      */
-	protected Produto(String desc, double precoCusto) {
-		init(desc, precoCusto, MARGEM_PADRAO);
-	}
-	
-	 /**
+    protected Produto(String desc, double precoCusto) {
+        init(desc, precoCusto, MARGEM_PADRAO);
+    }
+    
+     /**
      * Retorna o valor de venda do produto, considerando seu preço de custo e margem de lucro.
      * @return Valor de venda do produto (double, positivo)
      */
-	public abstract double valorDeVenda();
-	
-	/**
+    public abstract double valorDeVenda();
+    
+    /**
      * Descrição, em string, do produto, contendo sua descrição e o valor de venda.
-     *  @return String com o formato:
+     * @return String com o formato:
      * [NOME]: R$ [VALOR DE VENDA]
      */
     @Override
-	public String toString() {
-    	
-    	NumberFormat moeda = NumberFormat.getCurrencyInstance();
-    	
-		return String.format("IDENTIFICADOR: " + idProduto + " NOME: " + descricao + ": " + moeda.format(valorDeVenda()));
-	}
+    public String toString() {
+        
+        NumberFormat moeda = NumberFormat.getCurrencyInstance();
+        
+        return String.format("IDENTIFICADOR: " + idProduto + " NOME: " + descricao + ": " + moeda.format(valorDeVenda()));
+    }
     
     @Override
     /**
@@ -98,7 +98,7 @@ public abstract class Produto implements Comparable<Produto>{
     }
     
     public int compareTo(Produto outro){
-    	return this.descricao.compareTo(outro.descricao);
+        return this.descricao.compareTo(outro.descricao);
     }
     
     /**
@@ -110,29 +110,29 @@ public abstract class Produto implements Comparable<Produto>{
      */
     static Produto criarDoTexto(String linha) {
      
-    	String[] dadosLinha;
-    	int tipo;
-    	String descricao;
-    	double precoCusto, margemLucro;
-    	LocalDate dataDeValidade;
-    	Produto produto;
-    	
-    	dadosLinha = linha.split(";");
-    	tipo = Integer.parseInt(dadosLinha[0]);
-    	descricao = dadosLinha[1];
-    	precoCusto = Double.parseDouble(dadosLinha[2].replace(",", "."));
+        String[] dadosLinha;
+        int tipo;
+        String descricao;
+        double precoCusto, margemLucro;
+        LocalDate dataDeValidade;
+        Produto produto;
+        
+        dadosLinha = linha.split(";");
+        tipo = Integer.parseInt(dadosLinha[0]);
+        descricao = dadosLinha[1];
+        precoCusto = Double.parseDouble(dadosLinha[2].replace(",", "."));
         margemLucro = Double.parseDouble(dadosLinha[3].replace(",", "."));
         if (tipo == 2) {
-    		DateTimeFormatter formatoData = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-    		dataDeValidade = LocalDate.parse(dadosLinha[4], formatoData);
-    		produto = new ProdutoPerecivel(descricao, precoCusto, margemLucro, dataDeValidade);
-    	} else {
-    		produto = new ProdutoNaoPerecivel(descricao, precoCusto, margemLucro);
-    	}
-    	
-    	return produto;
+            DateTimeFormatter formatoData = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+            dataDeValidade = LocalDate.parse(dadosLinha[4], formatoData);
+            produto = new ProdutoPerecivel(descricao, precoCusto, margemLucro, dataDeValidade);
+        } else {
+            produto = new ProdutoNaoPerecivel(descricao, precoCusto, margemLucro);
+        }
+        
+        return produto;
     }
-    	
+        
     /**
      * Gera uma linha de texto a partir dos dados do produto.
      * @return Uma string no formato "tipo;descrição;preçoDeCusto;margemDeLucro;[dataDeValidade]"
